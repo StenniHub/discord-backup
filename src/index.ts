@@ -76,8 +76,8 @@ export const create = async (
 ) => {
     return new Promise<BackupData>(async (resolve, reject) => {
 
-       const intents = new IntentsBitField(guild.client.options.intents);
-       if (!intents.has(IntentsBitField.Flags.Guilds)) return reject('Guilds intent is required');
+        const intents = new IntentsBitField(guild.client.options.intents);
+        if (!intents.has(IntentsBitField.Flags.Guilds)) return reject('Guilds intent is required');
 
         try {
             const backupData: BackupData = {
@@ -151,20 +151,29 @@ export const create = async (
                 // Backup channels
                 if (options && options.filePerChannel) {
                     backupData.channels = { categories: [], others: [] };  // Empty placeholder in main json
+
+                    const rootDir = `${backups}${sep}${backupData.id}`
+                    if (!existsSync(rootDir)) mkdirSync(rootDir);
+
+                    const categoriesDir = `${rootDir}${sep}categories`;
+                    if (!existsSync(categoriesDir)) mkdirSync(categoriesDir);
                     
                     let i = 1;
                     const cateogories = createMaster.getCategories(guild);
                     for (const category of cateogories) {
                         const categoryData = await createMaster.getCategoryData(category, options);
-                        await saveJson(categoryData, options, `${backups}${sep}${backupData.id}${sep}"categories"${sep}${i}.json`);
+                        await saveJson(categoryData, options, `${backups}${sep}${backupData.id}${sep}categories${sep}${i}.json`);
                         i++;
                     }
+
+                    const otherChannelsDir = `${rootDir}${sep}other_channels`;
+                    if (!existsSync(otherChannelsDir)) mkdirSync(otherChannelsDir);
 
                     i = 1;
                     const otherChannels = createMaster.getOtherChannels(guild);
                     for (const channel of otherChannels) {
                         const channelData = await createMaster.getChannelData(channel, options);
-                        await saveJson(channelData, options, `${backups}${sep}${backupData.id}${sep}"other_channels"${sep}${i}.json`);
+                        await saveJson(channelData, options, `${otherChannelsDir}${sep}${i}.json`);
                         i++;
                     }
                 } else {
