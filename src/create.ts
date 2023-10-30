@@ -111,50 +111,75 @@ export async function getChannels(guild: Guild, options: CreateOptions) {
             categories: [],
             others: []
         };
+
         // Gets the list of the categories and sort them by position
-        const categories = (guild.channels.cache
-            .filter((ch) => ch.type === ChannelType.GuildCategory) as Collection<Snowflake, CategoryChannel>)
-            .sort((a, b) => a.position - b.position)
-            .toJSON() as CategoryChannel[];
+        const categories = getCategories(guild);
         for (const category of categories) {
-            const categoryData: CategoryData = {
-                name: category.name, // The name of the category
-                permissions: fetchChannelPermissions(category), // The overwrite permissions of the category
-                children: [] // The children channels of the category
-            };
-            // Gets the children channels of the category and sort them by position
-            const children = category.children.cache.sort((a, b) => a.position - b.position).toJSON();
-            for (const child of children) {
-                // For each child channel
-                if (child.type === ChannelType.GuildText || child.type === ChannelType.GuildNews) {
-                    const channelData: TextChannelData = await fetchTextChannelData(child as TextChannel, options); // Gets the channel data
-                    categoryData.children.push(channelData); // And then push the child in the categoryData
-                } else {
-                    const channelData: VoiceChannelData = await fetchVoiceChannelData(child as VoiceChannel); // Gets the channel data
-                    categoryData.children.push(channelData); // And then push the child in the categoryData
-                }
-            }
-            channels.categories.push(categoryData); // Update channels object
+            const categoryData = await getCategoryData(category, options);
+            channels.categories.push(categoryData);
         }
+
         // Gets the list of the other channels (that are not in a category) and sort them by position
-        const others = (guild.channels.cache
-            .filter((ch) => {
-                return !ch.parent && ch.type !== ChannelType.GuildCategory
-                    //&& ch.type !== 'GUILD_STORE' // there is no way to restore store channels, ignore them
-                    && ch.type !== ChannelType.GuildNewsThread && ch.type !== ChannelType.GuildPrivateThread && ch.type !== ChannelType.GuildPublicThread // threads will be saved with fetchTextChannelData
-            }) as Collection<Snowflake, Exclude<GuildChannel, ThreadChannel>>)
-            .sort((a, b) => a.position - b.position)
-            .toJSON();
+        const others = getOtherChannels(guild);
         for (const channel of others) {
-            // For each channel
-            if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildNews) {
-                const channelData: TextChannelData = await fetchTextChannelData(channel as TextChannel, options); // Gets the channel data
-                channels.others.push(channelData); // Update channels object
-            } else {
-                const channelData: VoiceChannelData = await fetchVoiceChannelData(channel as VoiceChannel); // Gets the channel data
-                channels.others.push(channelData); // Update channels object
-            }
+            const channelData = await getChannelData(channel, options);
+            channels.others.push(channelData);
         }
+
         resolve(channels); // Returns the list of the channels
     });
+}
+
+export function getCategories(guild: Guild) {
+    return (guild.channels.cache.filter((ch) => ch.type === ChannelType.GuildCategory) as Collection<Snowflake, CategoryChannel>)
+            .sort((a, b) => a.position - b.position)
+            .toJSON() as CategoryChannel[];
+}
+
+export async function getCategoryData(category: CategoryChannel, options: CreateOptions) {
+    return new Promise<CategoryData>(async (resolve) => {
+        const categoryData: CategoryData = {
+            name: category.name, // The name of the category
+            permissions: fetchChannelPermissions(category), // The overwrite permissions of the category
+            children: [] // The children channels of the category
+        };
+        
+        // Gets the children channels of the category and sort them by position
+        const children = category.children.cache.sort((a, b) => a.position - b.position).toJSON();
+        for (const child of children) {
+            // For each child channel
+            if (child.type === ChannelType.GuildText || child.type === ChannelType.GuildNews) {
+                const channelData: TextChannelData = await fetchTextChannelData(child as TextChannel, options); // Gets the channel data
+                categoryData.children.push(channelData); // And then push the child in the categoryData
+            } else {
+                const channelData: VoiceChannelData = await fetchVoiceChannelData(child as VoiceChannel); // Gets the channel data
+                categoryData.children.push(channelData); // And then push the child in the categoryData
+            }
+        }
+    
+        resolve(categoryData);
+    })
+}
+
+export function getOtherChannels(guild: Guild) {
+    return (guild.channels.cache.filter((ch) => {
+        return !ch.parent && ch.type !== ChannelType.GuildCategory
+                //&& ch.type !== 'GUILD_STORE' // there is no way to restore store channels, ignore them
+                && ch.type !== ChannelType.GuildNewsThread && ch.type !== ChannelType.GuildPrivateThread && ch.type !== ChannelType.GuildPublicThread // threads will be saved with fetchTextChannelData
+        }) as Collection<Snowflake, Exclude<GuildChannel, ThreadChannel>>)
+        .sort((a, b) => a.position - b.position)
+        .toJSON();
+}
+
+// TODO: What type is channel?
+export async function getChannelData(channel: any, options: CreateOptions) {
+    return new Promise<TextChannelData | VoiceChannelData>(async (resolve) => {
+        if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildNews) {
+            const channelData: TextChannelData = await fetchTextChannelData(channel as TextChannel, options); // Gets the channel data
+            resolve(channelData);
+        } else {
+            const channelData: VoiceChannelData = await fetchVoiceChannelData(channel as VoiceChannel); // Gets the channel data
+            resolve(channelData);
+        }
+    });   
 }

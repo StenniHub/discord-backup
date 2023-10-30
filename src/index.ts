@@ -99,6 +99,7 @@ export const create = async (
                 guildID: guild.id,
                 id: options.backupID ?? SnowflakeUtil.generate().toString()
             };
+
             if (guild.iconURL()) {
                 if (options && options.saveImages && options.saveImages === 'base64') {
                     backupData.iconBase64 = (
@@ -107,6 +108,7 @@ export const create = async (
                 }
                 backupData.iconURL = guild.iconURL();
             }
+
             if (guild.splashURL()) {
                 if (options && options.saveImages && options.saveImages === 'base64') {
                     backupData.splashBase64 = (await nodeFetch(guild.splashURL()).then((res) => res.buffer())).toString(
@@ -115,6 +117,7 @@ export const create = async (
                 }
                 backupData.splashURL = guild.splashURL();
             }
+
             if (guild.bannerURL()) {
                 if (options && options.saveImages && options.saveImages === 'base64') {
                     backupData.bannerBase64 = (await nodeFetch(guild.bannerURL()).then((res) => res.buffer())).toString(
@@ -123,34 +126,57 @@ export const create = async (
                 }
                 backupData.bannerURL = guild.bannerURL();
             }
+
             if (options && options.backupMembers) {
                 // Backup members
                 backupData.members = await createMaster.getMembers(guild);
             }
+
             if (!options || !(options.doNotBackup || []).includes('bans')) {
                 // Backup bans
                 backupData.bans = await createMaster.getBans(guild);
             }
+
             if (!options || !(options.doNotBackup || []).includes('roles')) {
                 // Backup roles
                 backupData.roles = await createMaster.getRoles(guild);
             }
+
             if (!options || !(options.doNotBackup || []).includes('emojis')) {
                 // Backup emojis
                 backupData.emojis = await createMaster.getEmojis(guild, options);
             }
+
             if (!options || !(options.doNotBackup || []).includes('channels')) {
                 // Backup channels
-                backupData.channels = await createMaster.getChannels(guild, options);
+                if (options && options.filePerChannel) {
+                    backupData.channels = { categories: [], others: [] };  // Empty placeholder in main json
+                    
+                    let i = 1;
+                    const cateogories = createMaster.getCategories(guild);
+                    for (const category of cateogories) {
+                        const categoryData = await createMaster.getCategoryData(category, options);
+                        await saveJson(categoryData, options, `${backups}${sep}${backupData.id}${sep}"categories"${sep}${i}.json`);
+                        i++;
+                    }
+
+                    i = 1;
+                    const otherChannels = createMaster.getOtherChannels(guild);
+                    for (const channel of otherChannels) {
+                        const channelData = await createMaster.getChannelData(channel, options);
+                        await saveJson(channelData, options, `${backups}${sep}${backupData.id}${sep}"other_channels"${sep}${i}.json`);
+                        i++;
+                    }
+                } else {
+                    backupData.channels = await createMaster.getChannels(guild, options);
+                }
+                
             }
+
             if (!options || options.jsonSave === undefined || options.jsonSave) {
-                // Convert Object to JSON
-                const backupJSON = options.jsonBeautify
-                    ? JSON.stringify(backupData, null, 4)
-                    : JSON.stringify(backupData);
-                // Save the backup
-                await writeFile(`${backups}${sep}${backupData.id}.json`, backupJSON, 'utf-8');
+                await saveJson(backupData, options, `${backups}${sep}${backupData.id}.json`);
             }
+
             // Returns ID
             resolve(backupData);
         } catch (e) {
@@ -158,6 +184,13 @@ export const create = async (
         }
     });
 };
+
+const saveJson = async (data: any, options: CreateOptions, filepath: string) => {
+    // Convert Object to JSON
+    const objectJSON = options.jsonBeautify ? JSON.stringify(data, null, 4) : JSON.stringify(data);
+    // Save the backup
+    await writeFile(filepath, objectJSON, 'utf-8');
+}
 
 /**
  * Loads a backup for a guild
